@@ -3,8 +3,8 @@ name: Request Copilot Review
 on:
   workflow_call:
     secrets:
-      GITHUB_TOKEN:
-        description: 'GitHub token for API access'
+      PAT_TOKEN:
+        description: 'GitHub Personal Access Token for API access'
         required: true
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
       with:
         repository: backend-sw-development-team2/.github
         path: .github-repo
-        token: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ secrets.PAT_TOKEN }}
     
     - name: Setup Python
       uses: actions/setup-python@v5
@@ -35,7 +35,7 @@ jobs:
     - name: Check Copilot Reviewer
       id: check_copilot
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
       run: |
         echo "🔍 Copilot 리뷰어 존재 여부 확인 중..."
         
@@ -106,8 +106,8 @@ jobs:
     - name: Request Copilot Review
       if: steps.check_copilot.outputs.skip_copilot == 'false'
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+        GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.PAT_TOKEN }}
       run: |
         echo "🤖 GitHub Copilot 리뷰 요청 중..."
         echo "📍 PR 번호: ${{ steps.check_copilot.outputs.pr_number }}"
