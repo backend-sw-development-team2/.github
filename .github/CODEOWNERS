@@ -1,0 +1,5 @@
+# CODEOWNERS file for .github repository
+# This file defines who is responsible for code review and approval
+
+# Global ownership - SE_Team owns everything by default
+* @SE_Team

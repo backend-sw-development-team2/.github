@@ -1,0 +1,126 @@
+name: Request Copilot Review
+
+on:
+  workflow_call:
+    secrets:
+      GITHUB_TOKEN:
+        description: 'GitHub token for API access'
+        required: true
+
+jobs:
+  request-copilot-review:
+    runs-on: ubuntu-24.04
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Checkout .github repository
+      uses: actions/checkout@v4
+      with:
+        repository: backend-sw-development-team2/.github
+        path: .github-repo
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install Dependencies
+      run: |
+        echo "📦 Python 패키지 설치 중..."
+        pip install requests
+    
+    - name: Check Copilot Reviewer
+      id: check_copilot
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "🔍 Copilot 리뷰어 존재 여부 확인 중..."
+        
+        # PR 번호는 항상 pull_request 이벤트에서 가져옴
+        PR_NUMBER="${{ github.event.pull_request.number }}"
+        
+        echo "📍 PR 번호: $PR_NUMBER"
+        
+        # PR의 현재 리뷰어 목록 확인
+        REVIEWERS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+          "https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER/requested_reviewers" | \
+          jq -r '.users[]?.login // empty')
+        
+        # PR의 기존 리뷰 확인 (Copilot이 이미 리뷰했는지)
+        REVIEWS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+          "https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER/reviews" | \
+          jq -r '.[].user.login // empty')
+        
+        echo "현재 리뷰어: $REVIEWERS"
+        echo "기존 리뷰어: $REVIEWS"
+        
+        # Copilot이 이미 리뷰어로 있거나 리뷰를 남겼는지 확인
+        COPILOT_EXISTS=false
+        if echo "$REVIEWERS $REVIEWS" | grep -q "copilot-pull-request-reviewer\[bot\]"; then
+          COPILOT_EXISTS=true
+        fi
+        
+        if [ "$COPILOT_EXISTS" = "true" ]; then
+          echo "✅ Copilot 리뷰어가 이미 존재하거나 리뷰를 완료했습니다. 스킵합니다."
+          echo "skip_copilot=true" >> $GITHUB_OUTPUT
+        else
+          echo "➡️ Copilot 리뷰어가 없습니다. 추가를 진행합니다."
+          echo "skip_copilot=false" >> $GITHUB_OUTPUT
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Download and Setup MCP Server
+      if: steps.check_copilot.outputs.skip_copilot == 'false'
+      run: |
+        echo "📥 GitHub MCP 서버 다운로드 중..."
+        
+        # GitHub MCP 서버가 로컬에 있는지 확인
+        if [ -f ./github-mcp-server ]; then
+          echo "✅ 로컬에서 GitHub MCP 서버 발견됨"
+          chmod +x ./github-mcp-server
+        else
+          echo "⬇️  GitHub MCP 서버를 다운로드합니다..."
+          
+          # GitHub 공식 MCP 서버 다운로드 (Linux x86_64 버전)
+          curl -L -o github-mcp-server.tar.gz \
+            "https://github.com/github/github-mcp-server/releases/latest/download/github-mcp-server_Linux_x86_64.tar.gz"
+          
+          # 압축 해제
+          tar -xzf github-mcp-server.tar.gz
+          
+          # 실행 권한 부여
+          chmod +x github-mcp-server
+          
+          echo "✅ GitHub MCP 서버 다운로드 및 설정 완료"
+        fi
+        
+        echo "🔍 MCP 서버 확인:"
+        ls -la github-mcp-server
+        
+        echo "📋 현재 디렉토리 내용:"
+        ls -la
+    
+    - name: Request Copilot Review
+      if: steps.check_copilot.outputs.skip_copilot == 'false'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "🤖 GitHub Copilot 리뷰 요청 중..."
+        echo "📍 PR 번호: ${{ steps.check_copilot.outputs.pr_number }}"
+        echo "📍 저장소: ${{ github.repository }}"
+        
+        # MCP 서버를 사용하여 Copilot 리뷰 요청
+        echo "📱 MCP 서버를 사용하여 요청합니다..."
+        
+        # 저장소 정보 추출
+        OWNER="${{ github.repository_owner }}"
+        REPO="${{ github.event.repository.name }}"
+        
+        python3 .github-repo/.github/scripts/request_copilot_review.py \
+          --owner "$OWNER" \
+          --repo "$REPO" \
+          --pr "${{ steps.check_copilot.outputs.pr_number }}"
